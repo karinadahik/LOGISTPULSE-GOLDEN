@@ -1,4 +1,4 @@
-# ADR-001 — Inventory data ownership and API boundary
+# 2. Inventory data ownership
 
 ## Status
 

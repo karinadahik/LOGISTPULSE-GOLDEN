@@ -24,102 +24,92 @@ jobs:
           fetch-depth: 0
 
 
-      - name: Validate ADR structure
+      - name: Install adr-tools
         shell: bash
         run: |
-
           set -euo pipefail
 
-          mapfile -t ADR_FILES < <(
-            find docs/adr \
-              -maxdepth 1 \
-              -type f \
-              -name 'ADR-[0-9][0-9][0-9]-*.md' \
-              | sort
-          )
+          git clone --depth 1 --branch 3.0.0 \
+            https://github.com/npryce/adr-tools.git \
+            /tmp/adr-tools
+
+          echo "/tmp/adr-tools/src" >> "$GITHUB_PATH"
+
+
+      - name: Validate ADR registry with adr-tools
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "ADR registry managed by adr-tools:"
+          adr list
+
+          mapfile -t ADR_FILES < <(adr list)
 
           if [ "${#ADR_FILES[@]}" -eq 0 ]; then
-            echo "::error::No numbered ADR was found in docs/adr/"
+            echo "::error::adr-tools found no ADRs"
             exit 1
           fi
 
-
           for adr in "${ADR_FILES[@]}"; do
-
             echo "Validating $adr"
 
             for heading in \
               "## Status" \
               "## Context" \
               "## Decision" \
-              "## Data ownership" \
-              "## Alternatives considered" \
-              "## Consequences" \
-              "### Positive" \
-              "### Negative" \
-              "## Reliability and failure modes" \
-              "## Observability evidence" \
-              "## Security considerations"
+              "## Consequences"
             do
-
               if ! grep -Fqx "$heading" "$adr"; then
-
-                echo \
-                  "::error file=$adr::Missing required section: $heading"
-
+                echo "::error file=$adr::Missing required section: $heading"
                 exit 1
-
               fi
-
             done
 
-
             if ! grep -Eq '^(Proposed|Accepted|Superseded)$' "$adr"; then
-
-              echo \
-                "::error file=$adr::ADR Status must be Proposed, Accepted or Superseded"
-
+              echo "::error file=$adr::Invalid ADR status"
               exit 1
-
             fi
+          done
 
+          INVENTORY_ADR="docs/adr/0002-inventory-data-ownership.md"
+
+          for heading in \
+            "## Data ownership" \
+            "## Alternatives considered" \
+            "### Positive" \
+            "### Negative" \
+            "## Reliability and failure modes" \
+            "## Observability evidence" \
+            "## Security considerations"
+          do
+            if ! grep -Fqx "$heading" "$INVENTORY_ADR"; then
+              echo "::error file=$INVENTORY_ADR::Missing LOGISTPULSE section: $heading"
+              exit 1
+            fi
           done
 
 
-      - name: Require ADR in Pull Request
+      - name: Require adr-tools ADR in Pull Request
         if: github.event_name == 'pull_request'
         shell: bash
-
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-
         run: |
-
           set -euo pipefail
 
-          echo "Files changed by this Pull Request:"
-
-          git diff \
-            --name-only \
-            "$BASE_SHA" \
-            "$HEAD_SHA" \
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" \
             | tee /tmp/changed-files.txt
 
-
-          if ! grep -Eq \
-            '^docs/adr/ADR-[0-9]{3}-.*\.md$' \
+          if ! grep -Eq '^docs/adr/[0-9]{4}-.*\.md$' \
             /tmp/changed-files.txt; then
 
-            echo \
-              "::error::This Pull Request must add or modify a numbered ADR under docs/adr/"
-
+            echo "::error::This Pull Request must add or modify an ADR managed by adr-tools"
             exit 1
-
           fi
 
-
-          echo "ADR evidence found."
+          echo "adr-tools ADR evidence found."
 
   architecture-contract:
 
